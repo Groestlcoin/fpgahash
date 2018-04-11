@@ -144,15 +144,21 @@ its "w = 64" and it requires 256
       readdata <= result;
   end
 
+  wire [31:0] writedata_trans;
+
+  assign writedata_trans = { writedata[7:0], writedata[15:8], writedata[23:16], writedata[31:24] };
+
   always @ (posedge clk) begin
     
     if(reset) begin
       src_ready <= 1;
+      hash_reset <= 0;
     end
 
     else begin
       
       src_ready <= 1;
+      hash_reset <= 0;
 
       if(write == 1 && chipselect == 1) begin
         
@@ -165,6 +171,22 @@ its "w = 64" and it requires 256
         if(address[3:0] == 4'b1001) begin
           din[63:32] <= writedata[31:0];
           src_ready <= 0;
+        end
+
+        //data byte low
+        if(address[3:0] == 4'b1010) begin
+          din[31:0] <= writedata_trans[31:0];          
+        end
+
+        //data byte high
+        if(address[3:0] == 4'b1011) begin
+          din[63:32] <= writedata_trans[31:0];
+          src_ready <= 0;
+        end
+
+        //hash reset
+        if(address[3:0] == 4'b1111) begin
+          hash_reset <= 1;
         end
 
       end
