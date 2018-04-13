@@ -15,9 +15,8 @@ use work.groestl_pkg.all;
 
 entity groestl_control_pq_parallel is
 	generic (
-	hs : integer:=HASH_SIZE_256;		   
-	FF : integer := 2;
-	n : integer := GROESTL_DATA_SIZE_SMALL 	
+	hs : integer:=HASH_SIZE_256;
+	n : integer := GROESTL_DATA_SIZE_SMALL
 	);
 	port (
 		rst						: in std_logic;
@@ -45,8 +44,6 @@ entity groestl_control_pq_parallel is
 		wr_ctr					: out std_logic;
 		wr_result				: out std_logic;
 		wr_state				: out std_logic;
-        sel_rd					: out std_logic_vector(log2(FF)-1 downto 0);
-		wr_shiftreg				: out std_logic;
 
 		eo 						: out std_logic;
 		src_ready				: in std_logic;
@@ -77,8 +74,6 @@ architecture struct of groestl_control_pq_parallel is
 	signal final_wire, init1_wire, init2_wire, init3_wire : std_logic;
 	signal load_ctr_wire, wr_ctr_wire : std_logic;
 	signal wr_result_wire, wr_state_wire, lo_wire : std_logic;
-    signal wr_shiftreg_wire : std_logic;
-	signal sel_rd_wire : std_logic_vector(log2(FF)-1 downto 0);
 
 	signal dst_write_wire, eo_wire, lo_wire_delay : std_logic;
 begin
@@ -94,10 +89,10 @@ begin
 
 
 	fsm2_gen : entity work.groestl_fsm2_pq_parallel(beh)
-		generic	map (hs=>hs, ff=>ff)
+		generic	map (hs=>hs)
 		port map (clk => clk, rst => rst, block_ready => block_ready, msg_end => msg_end, output_busy => output_busy,
 		final => final_wire, init1 => init1_wire, init2 => init2_wire, init3 => init3_wire,
-		load_ctr => load_ctr_wire, sel_rd => sel_rd_wire, wr_shiftreg => wr_shiftreg_wire,
+		load_ctr => load_ctr_wire,
 		wr_ctr => wr_ctr_wire, wr_result => wr_result_wire, wr_state => wr_state_wire, lo => lo_wire,
 		block_ready_clr => block_ready_clr, msg_end_clr => msg_end_clr, output_write_set => output_write_set, output_busy_set => output_busy_set
 		);
@@ -134,8 +129,6 @@ begin
 			wr_result <= wr_result_wire;
 			wr_state <= wr_state_wire;
 			lo_wire_delay <= lo_wire;
-			sel_rd <= sel_rd_wire;
-			wr_shiftreg <= wr_shiftreg_wire;
 		end if;
 	end process;
 

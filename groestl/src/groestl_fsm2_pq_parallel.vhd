@@ -16,7 +16,7 @@ use work.groestl_pkg.all;
 -- hs = {HASH_SIZE_256, HASH_SIZE_512}
 
 entity groestl_fsm2_pq_parallel is
-	generic (hs : integer:=HASH_SIZE_256; FF:integer :=2);
+	generic (hs : integer:=HASH_SIZE_256);
 	port (
 		clk 					: in std_logic;
 		rst 					: in std_logic;
@@ -29,9 +29,7 @@ entity groestl_fsm2_pq_parallel is
 		wr_ctr					: out std_logic;
 		wr_result				: out std_logic;
 		wr_state				: out std_logic;
-		lo						: out std_logic;   
-		sel_rd					: out std_logic_vector(log2(FF)-1 downto 0);
-		wr_shiftreg				: out std_logic;
+		lo						: out std_logic;
 
 		block_ready_clr 		: out std_logic;
 		msg_end_clr 			: out std_logic;
@@ -47,9 +45,9 @@ architecture beh of groestl_fsm2_pq_parallel is
 	function get_roundnr ( hs : integer ) return integer is
 	begin
 		if hs = 256 then
-			return 10*FF;
+			return 10;
 		elsif hs = 512 then
-			return 14*FF;
+			return 14;
 		end if;
 	end function get_roundnr ;
 
@@ -57,7 +55,7 @@ architecture beh of groestl_fsm2_pq_parallel is
 	constant log2roundnr	: integer := log2( roundnr );
 	constant log2roundnrzeros : std_logic_vector(log2roundnr-1 downto 0) := (others => '0') ;
 
-	type state_type is ( reset, idle, process_data, process_last_data, pre_finalization, finalization, write_output, output_data );
+	type state_type is ( reset, idle, process_data, process_last_data, finalization, write_output, output_data );
 	signal cstate, nstate : state_type;
 
 	signal pc : std_logic_vector(log2roundnr-1 downto 0);
@@ -95,19 +93,21 @@ begin
 					nstate <= idle;
 				end if;
 			when process_data =>
-				if ( ziroundnr = '0' ) then
-					nstate <= process_data;				
+				if ( ziroundnr = '0' ) or (ziroundnr = '1' and msg_end = '0' and block_ready = '1') then
+					nstate <= process_data;
+				elsif (ziroundnr = '1' and msg_end = '1') then
+					nstate <= process_last_data;
 				else
 					nstate <= idle;
 				end if;
 			when process_last_data =>
 				if ( ziroundnr = '0' ) then
 					nstate <= process_last_data;
+				elsif (ziroundnr = '1') then
+					nstate <= finalization;
 				else
-					nstate <= pre_finalization;				
-				end if;						 
-			when pre_finalization => 
-				nstate <= finalization;
+					nstate <= idle;
+				end if;
 			when finalization =>
 				if ( ziroundnr = '0' ) then
 					nstate <= finalization;
@@ -139,10 +139,13 @@ begin
 	output_busy_set 	<= output_data_s;
 	lo					<= output_data_s;
 
-	block_ready_clr		<= '1' when ((cstate = process_data or cstate = process_last_data) and pc = 1 and block_ready = '1')
+
+	block_ready_clr		<= '1' when (cstate = idle and block_ready = '1') or
+                                    ((cstate = process_data or cstate = process_last_data) and pc = 0 and block_ready = '1')
                             else '0';
-							
-	ei <= '1' when (
+
+
+	ei <= '1' when ((cstate = idle and block_ready = '1') or
 					((cstate = process_data or cstate = process_last_data) and ziroundnr = '0') or
 					(cstate = finalization and ziroundnr = '0')) else '0';
 
@@ -152,34 +155,30 @@ begin
 	init1 <= '1' when  (cstate = idle and block_ready = '1') or
 						((cstate = process_data or cstate = process_last_data) and pc = 0) or
 						(cstate = output_data and output_busy = '0' and block_ready = '1') else '0';
-	init2 <= '1' when (cstate = pre_finalization)  else '0';
+	init2 <= '1' when (cstate = finalization and pc = 0)  else '0';
 
 	init3 <= '1' when (cstate = reset) or (cstate = write_output) or (cstate = output_data) else '0';
 
-	load_ctr <= '1' when (cstate = reset) or ((cstate = process_data or cstate = process_last_data) and pc = conv_std_logic_vector(roundnr-2,log2roundnr)) or
-						(cstate = finalization and pc=roundnr-1) else '0';						
+	load_ctr <= '1' when (cstate = reset) or ((cstate = process_data or cstate = process_last_data) and ziroundnr = '1') or
+						(cstate = finalization and pc=roundnr-1) else '0';
 
-	wr_ctr <= '1' when 	(cstate = process_data or cstate = process_last_data or cstate = finalization) and 
-						(pc(log2(ff)-1 downto 0) = conv_std_logic_vector(ff-2, log2(ff))) else '0';
+	wr_ctr <= '1' when 	(cstate = idle and block_ready = '1') or
+						(cstate = process_data or cstate = process_last_data or cstate = finalization ) else '0';
 	wr_result <= '1' when (cstate = reset) or
 						((cstate = process_data or cstate = process_last_data) and ( ziroundnr = '1' )) or
 						(cstate = finalization and ziroundnr = '1' ) or
 						(cstate = write_output and output_busy = '0') or
 						(cstate = output_data and output_busy = '0')  else '0';
 	wr_state <= '1' when (cstate = idle and block_ready = '1') or
-						 (	
-						 	(cstate = process_data or cstate = process_last_data or cstate = finalization)
-							and 
-							(pc(log2(ff)-1 downto 0) = conv_std_logic_vector(ff-1, log2(ff)))
-							and
-							ziroundnr = '0'
-						) or
-						(cstate = pre_finalization) or 
+						(cstate = process_data and ziroundnr = '0') or
+						((cstate = process_data) and ziroundnr = '1' and ((msg_end = '0' and block_ready = '1') or (msg_end = '1'))) or
+						(cstate = process_last_data) or
+						(cstate = finalization and ziroundnr = '0') or
+						(cstate = finalization and ziroundnr = '1' and output_busy = '0') or
 						(cstate = output_data and output_busy = '0') else '0';
 
 
-	msg_end_clr <= '1' when (cstate = idle and block_ready = '1' and msg_end = '1') else '0';
-	
-	sel_rd <= pc(log2(ff)-1 downto 0);
-	wr_shiftreg <= '1';
+	msg_end_clr <= '1' when (cstate = idle and block_ready = '1' and msg_end = '1') or
+							(cstate = process_data and block_ready = '1' and msg_end = '1' and ziroundnr = '1') else '0';
+
 end beh;

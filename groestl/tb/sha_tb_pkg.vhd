@@ -62,7 +62,7 @@ package sha_tb_pkg is
 	constant log2depth 			: integer 	:= 8;				-- 2^X = depth, where X = log2depth					   
 	
 	-- Test Mode
-	constant test_mode 		: integer := 1;
+	constant test_mode 		: integer := 0;
 		-- 0 = standard (no input empty or output full check)
 		-- 1 = all (standard + input empty)
 		-- 2 = standard + input empty error check

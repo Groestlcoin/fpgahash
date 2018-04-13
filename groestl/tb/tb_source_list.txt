@@ -41,7 +41,7 @@ groestl_mixbytes.vhd
 groestl_fsm1.vhd
 groestl_fsm2_pq_parallel.vhd
 groestl_control_pq_parallel.vhd
-groestl_pq_parallel_folded.vhd
+groestl_pq_parallel.vhd
 groestl_datapath_pq_parallel.vhd
 groestl_top_pq_parallel.vhd
 

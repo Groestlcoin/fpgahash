@@ -12,14 +12,13 @@ use work.sha3_pkg.all;
 use work.groestl_pkg.all;
 
 -- Groestl datapath for quasi-pipelined architecture
--- possible generics values: HS = {GROESTL_DATA_SIZE_SMALL, GROESTL_DATA_SIZE_BIG}
+-- possible generics values: hs = {GROESTL_DATA_SIZE_SMALL, GROESTL_DATA_SIZE_BIG}
 -- rom_style = {DISTRIBUTED, COMBINATIONAL}
 -- all combinations are allowed
 
 entity groestl_datapath_pq_parallel is
-generic (   n  :integer := GROESTL_DATA_SIZE_SMALL;
-            hs : integer := HASH_SIZE_256;   
-			ff : integer := 2;
+generic (   n	:integer := GROESTL_DATA_SIZE_SMALL;
+            hs : integer := HASH_SIZE_256;      
             rom_style : integer := DISTRIBUTED
          );
 port(
@@ -47,8 +46,6 @@ port(
 	wr_result			: in std_logic;
 	load_ctr			: in std_logic;
 	wr_ctr				: in std_logic;
-    wr_shiftreg			: in std_logic;
-	sel_rd				: in std_logic_vector(log2(ff)-1 downto 0);
 
 	-- output
 	sel_out				: in std_logic;
@@ -65,7 +62,7 @@ architecture basic of groestl_datapath_pq_parallel is
 	constant log2mwzeroes : std_logic_vector(log2mw-1 downto 0) := (others => '0');
 	constant zero : std_logic_vector(n-1 downto 0):= (others=>'0');
     signal  rin, from_final, to_left_round, to_right_round, from_left_register, from_right_register, to_final : std_logic_vector(n-1 downto 0);
-    signal  intermediate_left, two_xor, three_xor, to_init : std_logic_vector(n-1 downto 0);
+    signal  to_left_register, to_right_register, to_left_reg, to_right_reg, intermediate_left, two_xor, three_xor, to_init : std_logic_vector(n-1 downto 0);
 	signal  ctr : std_logic_vector(3 downto 0);
 	signal  round : std_logic_vector(7 downto 0);
 
@@ -131,21 +128,29 @@ begin
 	rd_num : countern
 	generic map (N =>4, step=>1, style =>COUNTER_STYLE_1)
 	port map (clk=>clk, rst=>rst, load=>load_ctr, en=>wr_ctr, input=> zero(3 downto 0) ,  output=>ctr);
-	round <= zero(3 downto 0) & ctr;
+	round <= zero(3 downto 0) & ctr;	
+	
 	-- parallel round
-	LeftRound:
-		entity work.groestl_pq_parallel_folded(round3)
-		generic map (n=>n, rom_style => rom_style, p_mode => 1, ff => ff)
-		port map (clk=>clk, rst=>rst, stateEnable=>wr_state, shiftEnable=>wr_shiftreg, sel => sel_rd,
-				  round=>round, input=>to_left_round, output=>from_left_register);
+	left_round : entity work.groestl_pq_parallel(round3_combinational)
+		generic map (n=>n, rom_style => rom_style, p_mode => 1)
+		port map (round=>round, input=>to_left_round, output=>to_left_register);
 
-	RightRound: 
-		entity work.groestl_pq_parallel_folded(round3)
-		generic map (n=>n, rom_style => rom_style, p_mode => 0, ff => ff)
-		port map (clk=>clk, rst=>rst, stateEnable=>wr_state, shiftEnable=>wr_shiftreg, sel => sel_rd,
-				  round=>round, input=>to_right_round, output=>from_right_register);
-	two_xor <= from_final xor from_left_register;
-	three_xor <= two_xor xor from_right_register;
+	right_round : entity work.groestl_pq_parallel(round3_combinational)
+		generic map (n=>n, rom_style => rom_style, p_mode => 0)
+		port map (round=>round, input=>to_right_round, output=>to_right_register);
+
+	-- storage register for intermediate values
+	lstate_reg : regn
+	generic map(N=>n, init=>zero(n-1 downto 0))
+	port map (clk => clk, rst => rst, en => wr_state, input => to_left_register, output => from_left_register );
+
+	rstate_reg : regn
+	generic map(N=>n, init=>zero(n-1 downto 0))
+	port map (clk => clk, rst => rst, en => wr_state, input => to_right_register, output => from_right_register );
+
+	two_xor <= from_final xor to_left_register;
+	three_xor <= two_xor xor to_right_register;
+
 	to_init <= two_xor when finalization='1' else three_xor;
 															
 	-- initialization vectors for different versions of Groestl
