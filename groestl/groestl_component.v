@@ -67,7 +67,7 @@ module inst.
 */
 
     groestl_top_pq_parallel #(
-        .FF(8),
+        .FF(2),
         .HS(hash_size) //HASH_SIZE_256
     ) groestl_inst(
         .rst        (hash_reset | reset),
@@ -217,29 +217,29 @@ avalon writes
       if(write == 1 && chipselect == 1) begin
         
         //data byte low
-        if(address[4:0] == 4'b00000) begin
+        if(address[4:0] == 5'b00000) begin
           din[31:0] <= writedata[31:0];          
         end
 
         //data byte high
-        if(address[4:0] == 4'b00001) begin
+        if(address[4:0] == 5'b00001) begin
           din[63:32] <= writedata[31:0];
           src_ready <= 0;
         end
 
         //data byte low
-        if(address[4:0] == 4'b00010) begin
+        if(address[4:0] == 5'b00010) begin
           din[31:0] <= writedata_trans[31:0];          
         end
 
         //data byte high
-        if(address[4:0] == 4'b00011) begin
+        if(address[4:0] == 5'b00011) begin
           din[63:32] <= writedata_trans[31:0];
           src_ready <= 0;
         end
 
         //hash reset
-        if(address[4:0] == 4'b01111) begin
+        if(address[4:0] == 5'b01111) begin
           hash_reset <= 1;
         end
 
